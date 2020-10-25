@@ -1,6 +1,10 @@
 #!/bin/sh
 set -euxo pipefail
 
+# Ensure this script is executed from within its own directory.
+GIT_ROOT="$(git rev-parse --show-toplevel)"
+cd "${GIT_ROOT}/sources"
+
 
 # Only use this when necessary, are currently not all instances are defined in the VF designspace
 # files.  generate static designspace referencing csv and variable designspace file later, this
@@ -9,25 +13,28 @@ set -euxo pipefail
 
 
 ## Statics
+static_fonts=(
+  # 3 arguments per line.
+  Roman/Fraunces_static.designspace ttf ../fonts/static/ttf
+  Roman/Fraunces_static.designspace otf ../fonts/static/otf/
+  Italic/FrauncesItalic_static.designspace ttf ../fonts/static/ttf/
+  Italic/FrauncesItalic_static.designspace otf ../fonts/static/otf/
+)
 
-echo "Generating Static fonts"
-mkdir -p ../fonts/static/otf
-mkdir -p ../fonts/static/ttf
+function generate_static_fonts {
+  echo "Generating Static fonts"
 
+  printf '%s\n' "${static_fonts[@]}" \
+    | xargs -t -L 3 --max-procs=0 ./generate_font_instances.sh
+}
 
-fontmake -m Roman/Fraunces_static.designspace -i -o ttf --output-dir ../fonts/static/ttf/
-fontmake -m Roman/Fraunces_static.designspace -i -o otf --output-dir ../fonts/static/otf/
-fontmake -m Italic/FrauncesItalic_static.designspace -i -o ttf --output-dir ../fonts/static/ttf/
-fontmake -m Italic/FrauncesItalic_static.designspace -i -o otf --output-dir ../fonts/static/otf/
-
+time generate_static_fonts
 
 echo "Post processing"
 ttfs=$(printf "%s\n" ../fonts/static/ttf/*.ttf)
 for ttf in $ttfs
 do
         gftools fix-dsig -f $ttf;
-        if [ -f "$ttf.fix" ]; then mv "$ttf.fix" $ttf; fi
-        ttfautohint $ttf "$ttf.fix";
         if [ -f "$ttf.fix" ]; then mv "$ttf.fix" $ttf; fi
         gftools fix-hinting $ttf;
         if [ -f "$ttf.fix" ]; then mv "$ttf.fix" $ttf; fi

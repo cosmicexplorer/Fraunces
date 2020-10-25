@@ -12,15 +12,6 @@ function die {
   exit 1
 }
 
-function parallel_instance_generation {
-  # We run `ttfautohint` on each output here by adding --autohint.
-  fontmake -m "$1" \
-           -i \
-           -o "$2" \
-           --output-dir "$3" \
-           --autohint "${4:-}"
-}
-
 ## Argument Validation
 if [[ "$#" -ne 3 ]]; then
   die "Received more than three arguments (designspace file, font format, output dir): $@"
@@ -41,4 +32,11 @@ esac
 ## Generating Instances
 mkdir -pv "$output_dir"
 
-parallel_instance_generation "$designspace" "$font_format" "$output_dir"
+# We run `ttfautohint` on each output here by adding --autohint.
+exec fontmake -m "$designspace" \
+     -i \
+     -o "$font_format" \
+     --output-dir "$output_dir" \
+     --autohint '' \
+     --timing \
+     --verbose=INFO

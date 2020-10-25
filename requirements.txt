@@ -5,3 +5,4 @@ statmake
 ttfautohint-py
 beautifulsoup4
 gitpython
+xmlstarlet

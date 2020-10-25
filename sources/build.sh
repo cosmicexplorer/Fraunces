@@ -20,26 +20,55 @@ static_fonts=(
   Italic/FrauncesItalic_static.designspace ttf ../fonts/static/ttf/
   Italic/FrauncesItalic_static.designspace otf ../fonts/static/otf/
 )
+function get_static_instances_from_designspaces {
+  ./extract_instances.sh {Roman,Italic}/*_static.designspace
+}
+
+
+# FIXME: This is a REALLY FANTASTIC CASE where shell scripting is EXCEEDINGLY difficult to work
+# with, but JUST AS BAD AS THE PYTHON CODE IN fixNameTable.py and friends!!!! This is a *use case*!!
+# NB: Especially take note of:
+# (1) The hacky progress bar
+# (2) The `stdbuf` unbuffering
+# (3) The partial output redirection!
+# (4) Being unable to use `xargs` or `parallel` with shell functions means recreating these
+#     ".../*_static.designspace" globs in get_static_instances_from_designspaces()!
+
+# NB: Looking to address all of the above with https://github.com/cosmicexplorer/funnel
 
 function generate_static_fonts {
-  echo "Generating Static fonts"
+  # This is really quick to calculate, and lets us know how much progress we're making!
+  total_num_static_instances="$(get_static_instances_from_designspaces | wc -l)"
+  echo "Generating Static fonts ($total_num_static_instances in total)"
 
+  # (1) Process each .designspace XML file and output format in parallel with `xargs`.
+  # (2) At this point, we're dealing with a ton of output, so we tee it to stderr so the user can
+  #     redirect to /dev/null if they don't need that finer-grained info.
+  # (3) However on stdout, we filter for messages that describe successfully writing out a .otf or
+  #     .ttf file, and give a quick progress bar with percentage, since we know how *many* instances
+  #     we'll eventually need to write, even if we're not checking which exact ones those are.
+  instances_processed=0
   printf '%s\n' "${static_fonts[@]}" \
-    | xargs -t -L 3 --max-procs=0 ./generate_font_instances.sh
+    | 2>&1 stdbuf -i0 -o0 -e0 xargs -t -L 3 --max-procs=0 ./generate_font_instances.sh \
+    | stdbuf -i0 -o0 -eL tee /dev/stderr \
+    | sed -Ene 's#^INFO:fontmake.font_project:Saving (.*)$#\1#gp' \
+    | while read just_saved_font; do
+    instances_processed="$(($instances_processed + 1))"
+    percent_complete="$((($instances_processed / $total_num_static_instances) / 100.0))"
+    echo "${percent_complete}% complete: ${instances_processed}/${total_num_static_instances} (${just_saved_font})"
+  done
 }
 
 time generate_static_fonts
+exit 0
 
 echo "Post processing"
-ttfs=$(printf "%s\n" ../fonts/static/ttf/*.ttf)
-for ttf in $ttfs
-do
-        gftools fix-dsig -f $ttf;
-        if [ -f "$ttf.fix" ]; then mv "$ttf.fix" $ttf; fi
-        gftools fix-hinting $ttf;
-        if [ -f "$ttf.fix" ]; then mv "$ttf.fix" $ttf; fi
-    python ../mastering/scripts/fixNameTable.py $ttf
-done
+
+gftools fix-dsig -a ../fonts/static/ttf/*.ttf
+gftools fix-hinting ../fonts/static/ttf/*.ttf
+# NB: This script appears to be doing something incredibly complex that it absolutely should not be
+# attempting to do on its own.
+python ../mastering/scripts/fixNameTable.py ../fonts/static/ttf/*.ttf
 
 
 
